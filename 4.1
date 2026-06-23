@@ -1,0 +1,119 @@
+package main
+
+import (
+	"bufio"
+	"encoding/csv"
+	"fmt"
+	"io"
+	"os"
+	"strconv"
+)
+
+type Stack[T any] struct {
+	items []T
+}
+
+func NewStack[T any]() *Stack[T] {
+	return &Stack[T]{items: []T{}}
+}
+
+func (s *Stack[T]) Push(v T) {
+	s.items = append(s.items, v)
+}
+
+func (s *Stack[T]) Pop() T {
+	n := len(s.items) - 1
+	v := s.items[n]
+	s.items = s.items[:n]
+	return v
+}
+
+func (s *Stack[T]) Peek() (T, bool) {
+	if len(s.items) == 0 {
+		var zero T
+		return zero, false
+	}
+	return s.items[len(s.items)-1], true
+}
+
+func (s *Stack[T]) IsEmpty() bool {
+	return len(s.items) == 0
+}
+
+func CalcularStockSpan(precios []float64) []int {
+	n := len(precios)
+	spans := make([]int, n)
+	stack := NewStack[int]()
+
+	for i := 0; i < n; i++ {
+		for !stack.IsEmpty() {
+			idx, _ := stack.Peek()
+			if precios[idx] > precios[i] {
+				break
+			}
+			stack.Pop()
+		}
+
+		if stack.IsEmpty() {
+			spans[i] = i + 1
+		} else {
+			idx, _ := stack.Peek()
+			spans[i] = i - idx
+		}
+		stack.Push(i)
+	}
+	return spans
+}
+
+func LeerPrecios(ruta string) ([]float64, error) {
+	f, err := os.Open(ruta)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	reader := csv.NewReader(bufio.NewReader(f))
+	if _, err := reader.Read(); err != nil {
+		return nil, err
+	}
+
+	var precios []float64
+	for {
+		linea, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err == nil {
+			if precio, err := strconv.ParseFloat(linea[4], 64); err == nil {
+				precios = append(precios, precio)
+			}
+		}
+	}
+	return precios, nil
+}
+
+func main() {
+	ruta := `C:\Users\flor\Desktop\taller3\datasets\aapl.us.txt`
+	precios, err := LeerPrecios(ruta)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+
+	if len(precios) == 0 {
+		return
+	}
+
+	spans := CalcularStockSpan(precios)
+	N := 5
+
+	fmt.Println("Resultados (Primeros N):")
+	for i := 0; i < N && i < len(precios); i++ {
+		fmt.Printf("Día %d: Precio %.2f, Span: %d\n", i, precios[i], spans[i])
+	}
+
+	fmt.Println("\nResultados (Últimos N):")
+	for i := len(precios) - N; i < len(precios); i++ {
+		fmt.Printf("Día %d: Precio %.2f, Span: %d\n", i, precios[i], spans[i])
+	}
+}
