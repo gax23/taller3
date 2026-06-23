@@ -1,0 +1,139 @@
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"strings"
+	"time"
+)
+
+type nodo struct {
+	ts   int64
+	next *nodo
+}
+
+type Cola struct {
+	head *nodo
+	tail *nodo
+	len  int
+}
+
+func (c *Cola) Enqueue(ts int64) {
+	n := &nodo{ts: ts}
+	if c.tail != nil {
+		c.tail.next = n
+	}
+	c.tail = n
+	if c.head == nil {
+		c.head = n
+	}
+	c.len++
+}
+
+func (c *Cola) Dequeue() (int64, bool) {
+	if c.head == nil {
+		return 0, false
+	}
+	ts := c.head.ts
+	c.head = c.head.next
+	c.len--
+	return ts, true
+}
+
+func (c *Cola) Front() (int64, bool) {
+	if c.head == nil {
+		return 0, false
+	}
+	return c.head.ts, true
+}
+
+func (c *Cola) Len() int { return c.len }
+
+func ParsearLinea(linea string) (string, int64, error) {
+	// Apache: 127.0.0.1 - - [10/Oct/2000:13:55:36 +0000]
+	campos := strings.Split(linea, " ")
+	ip := campos[0]
+
+	// Limpiar la fecha: sacarla de los corchetes
+	fechaRaw := linea[strings.Index(linea, "[")+1 : strings.Index(linea, "]")]
+
+	t, err := time.Parse("02/Jan/2006:15:04:05 -0700", fechaRaw)
+	if err != nil {
+		return "", 0, err
+	}
+	return ip, t.Unix(), nil
+}
+
+func main() {
+	ruta := `C:\Users\flor\Desktop\taller3\datasets\access.log`
+	M := 10
+	T := int64(60)
+
+	f, _ := os.Open(ruta)
+	defer f.Close()
+
+	colas := make(map[string]*Cola)
+	rechazos := make(map[string]int)
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		ip, ts, err := ParsearLinea(scanner.Text())
+		if err != nil {
+			continue
+		}
+
+		if _, ok := colas[ip]; !ok {
+			colas[ip] = &Cola{}
+		}
+		q := colas[ip]
+
+		// Limpiar viejos
+		for {
+			f, ok := q.Front()
+			if ok && f < (ts-T) {
+				q.Dequeue()
+			} else {
+				break
+			}
+		}
+
+		if q.Len() < M {
+			q.Enqueue(ts)
+			fmt.Printf("IP: %s -> ACEPTADA\n", ip)
+		} else {
+			rechazos[ip]++
+			fmt.Printf("IP: %s -> RECHAZADA\n", ip)
+		}
+	}
+
+	totalRechazos := 0
+	for _, cant := range rechazos {
+		totalRechazos += cant
+	}
+
+	fmt.Println("\n--- RESUMEN FINAL ---")
+	fmt.Printf("Total general de rechazos: %d\n", totalRechazos)
+
+	type par struct {
+		ip   string
+		cant int
+	}
+	var lista []par
+	for ip, cant := range rechazos {
+		lista = append(lista, par{ip, cant})
+	}
+
+	for i := 0; i < len(lista); i++ {
+		for j := i + 1; j < len(lista); j++ {
+			if lista[j].cant > lista[i].cant {
+				lista[i], lista[j] = lista[j], lista[i]
+			}
+		}
+	}
+
+	fmt.Println("\nTop 5 IPs con más rechazos:")
+	for i := 0; i < 5 && i < len(lista); i++ {
+		fmt.Printf("%d. IP: %s (Total: %d)\n", i+1, lista[i].ip, lista[i].cant)
+	}
+}
