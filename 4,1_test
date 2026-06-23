@@ -1,0 +1,21 @@
+package main
+
+import "testing"
+
+func TestCalcularStockSpan(t *testing.T) {
+	// Caso de prueba con datos conocidos
+	precios := []float64{100, 80, 60, 70, 60, 75, 85}
+	esperado := []int{1, 1, 1, 2, 1, 4, 6}
+
+	resultado := CalcularStockSpan(precios)
+
+	if len(resultado) != len(esperado) {
+		t.Fatalf("El tamaño del resultado es incorrecto")
+	}
+
+	for i, v := range resultado {
+		if v != esperado[i] {
+			t.Errorf("En el día %d se esperaba un span de %d, pero se obtuvo %d", i, esperado[i], v)
+		}
+	}
+}
