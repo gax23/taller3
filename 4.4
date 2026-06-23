@@ -1,0 +1,162 @@
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"math"
+	"os"
+	"strconv"
+	"strings"
+)
+
+type Pelicula struct {
+	ID     int
+	Rating float64
+}
+
+type Nodo struct {
+	clave    float64
+	datos    []Pelicula
+	h        int
+	izq, der *Nodo
+}
+
+var rotaciones int
+
+func altura(n *Nodo) int {
+	if n == nil {
+		return 0
+	}
+	return n.h
+}
+
+func rotarDer(y *Nodo) *Nodo {
+	rotaciones++
+	x := y.izq
+	y.izq = x.der
+	x.der = y
+	y.h = 1 + int(math.Max(float64(altura(y.izq)), float64(altura(y.der))))
+	x.h = 1 + int(math.Max(float64(altura(x.izq)), float64(altura(x.der))))
+	return x
+}
+
+func rotarIzq(x *Nodo) *Nodo {
+	rotaciones++
+	y := x.der
+	x.der = y.izq
+	y.izq = x
+	x.h = 1 + int(math.Max(float64(altura(x.izq)), float64(altura(x.der))))
+	y.h = 1 + int(math.Max(float64(altura(y.izq)), float64(altura(y.der))))
+	return y
+}
+
+func Insertar(n *Nodo, clave float64, p Pelicula) *Nodo {
+	if n == nil {
+		return &Nodo{clave: clave, datos: []Pelicula{p}, h: 1}
+	}
+	if clave < n.clave {
+		n.izq = Insertar(n.izq, clave, p)
+	} else if clave > n.clave {
+		n.der = Insertar(n.der, clave, p)
+	} else {
+		n.datos = append(n.datos, p)
+		return n
+	}
+
+	n.h = 1 + int(math.Max(float64(altura(n.izq)), float64(altura(n.der))))
+	balance := altura(n.izq) - altura(n.der)
+
+	if balance > 1 && clave < n.izq.clave {
+		return rotarDer(n)
+	}
+	if balance < -1 && clave > n.der.clave {
+		return rotarIzq(n)
+	}
+	if balance > 1 && clave > n.izq.clave {
+		n.izq = rotarIzq(n.izq)
+		return rotarDer(n)
+	}
+	if balance < -1 && clave < n.der.clave {
+		n.der = rotarDer(n.der)
+		return rotarIzq(n)
+	}
+	return n
+}
+
+func Buscar(n *Nodo, a, b float64, res *[]Pelicula) {
+	if n == nil {
+		return
+	}
+	if n.clave > a {
+		Buscar(n.izq, a, b, res)
+	}
+	if n.clave >= a && n.clave <= b {
+		*res = append(*res, n.datos...)
+	}
+	if n.clave < b {
+		Buscar(n.der, a, b, res)
+	}
+}
+func estaBalanceado(n *Nodo) bool {
+	if n == nil {
+		return true
+	}
+	fb := altura(n.izq) - altura(n.der)
+	if fb < -1 || fb > 1 {
+		return false
+	}
+	return estaBalanceado(n.izq) && estaBalanceado(n.der)
+}
+
+func contarNodos(n *Nodo) int {
+	if n == nil {
+		return 0
+	}
+	return 1 + contarNodos(n.izq) + contarNodos(n.der)
+}
+func main() {
+	f, err := os.Open(`C:\Users\flor\Desktop\taller3\datasets\u4_4.data`)
+	if err != nil {
+		fmt.Println("Error: archivo no encontrado")
+		return
+	}
+	defer f.Close()
+
+	suma, conteo := make(map[int]float64), make(map[int]int)
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		p := strings.Fields(scanner.Text())
+		if len(p) < 3 {
+			continue
+		}
+		id, _ := strconv.Atoi(p[1])
+		r, _ := strconv.ParseFloat(p[2], 64)
+		suma[id] += r
+		conteo[id]++
+	}
+
+	var raiz *Nodo
+	for id, s := range suma {
+		r := math.Round(s/float64(conteo[id])*100) / 100
+		raiz = Insertar(raiz, r, Pelicula{id, r})
+	}
+
+	res := []Pelicula{}
+	Buscar(raiz, 3.5, 4.5, &res)
+
+	fmt.Printf("Películas con rating en [3.5, 4.5]: %d\n", len(res))
+	for i := 0; i < 10 && i < len(res); i++ {
+		fmt.Printf("ID: %d, Rating: %.2f\n", res[i].ID, res[i].Rating)
+	}
+	fmt.Println("--- METRICAS DEL ARBOL AVL ---")
+	fmt.Printf("  Altura final del árbol : %d\n", altura(raiz))
+	fmt.Printf("  Nodos totales del árbol: %d\n", contarNodos(raiz))
+	fmt.Printf("  Rotaciones realizadas  : %d\n", rotaciones)
+	fmt.Printf("  ¿Árbol balanceado?     : %v\n", estaBalanceado(raiz))
+
+	fmt.Printf("\nPelículas con rating en [3.5, 4.5]: %d\n", len(res))
+	fmt.Println(strings.Repeat("-", 30))
+	for i := 0; i < 10 && i < len(res); i++ {
+		fmt.Printf("ID: %d, Rating: %.2f\n", res[i].ID, res[i].Rating)
+	}
+}
