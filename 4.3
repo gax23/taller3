@@ -1,0 +1,148 @@
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"sort"
+	"strconv"
+	"strings"
+)
+
+type Nodo struct {
+	clave, valor int
+	prev, next   *Nodo
+}
+
+type LRU struct {
+	cap        int
+	mapa       map[int]*Nodo
+	head, tail *Nodo
+}
+
+func NuevoLRU(cap int) *LRU {
+	head := &Nodo{}
+	tail := &Nodo{}
+	head.next = tail
+	tail.prev = head
+	return &LRU{cap: cap, mapa: make(map[int]*Nodo), head: head, tail: tail}
+}
+
+func (l *LRU) remover(n *Nodo) {
+	n.prev.next = n.next
+	n.next.prev = n.prev
+}
+
+func (l *LRU) insertarAlFrente(n *Nodo) {
+	n.next = l.head.next
+	n.prev = l.head
+	l.head.next.prev = n
+	l.head.next = n
+}
+
+func (l *LRU) Get(clave int) (int, bool) {
+	n, ok := l.mapa[clave]
+	if !ok {
+		return 0, false
+	}
+	l.remover(n)
+	l.insertarAlFrente(n)
+	return n.valor, true
+}
+
+func (l *LRU) Put(clave, valor int) {
+	if n, ok := l.mapa[clave]; ok {
+		n.valor = valor
+		l.remover(n)
+		l.insertarAlFrente(n)
+		return
+	}
+	if len(l.mapa) >= l.cap {
+		lru := l.tail.prev
+		l.remover(lru)
+		delete(l.mapa, lru.clave)
+	}
+	n := &Nodo{clave: clave, valor: valor}
+	l.insertarAlFrente(n)
+	l.mapa[clave] = n
+}
+
+func CargarSecuencia(ruta string) ([]int, error) {
+	f, err := os.Open(ruta)
+	if err != nil {
+		return nil, fmt.Errorf("no se pudo abrir %s: %w", ruta, err)
+	}
+	defer f.Close()
+
+	type fila struct {
+		ts      int64
+		movieID int
+	}
+	var filas []fila
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		linea := strings.TrimSpace(scanner.Text())
+		if linea == "" {
+			continue
+		}
+		partes := strings.Fields(linea)
+		if len(partes) < 4 {
+			continue
+		}
+		mid, err1 := strconv.Atoi(partes[1])
+		ts, err2 := strconv.ParseInt(partes[3], 10, 64)
+		if err1 != nil || err2 != nil {
+			continue
+		}
+		filas = append(filas, fila{ts, mid})
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+
+	sort.Slice(filas, func(i, j int) bool {
+		return filas[i].ts < filas[j].ts
+	})
+
+	secuencia := make([]int, len(filas))
+	for i, f := range filas {
+		secuencia[i] = f.movieID
+	}
+	return secuencia, nil
+}
+
+func simular(secuencia []int, capacidad int) float64 {
+	cache := NuevoLRU(capacidad)
+	hits := 0
+	for _, id := range secuencia {
+		if _, ok := cache.Get(id); ok {
+			hits++
+		} else {
+			cache.Put(id, id)
+		}
+	}
+	return float64(hits) / float64(len(secuencia))
+}
+
+func main() {
+	ruta := `C:\Users\flor\Desktop\taller3\datasets\u.data`
+	capacidades := []int{50, 100, 500, 1000}
+
+	secuencia, err := CargarSecuencia(ruta)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Error:", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Accesos totales: %d\n\n", len(secuencia))
+	fmt.Printf("%-12s  %s\n", "Capacidad", "Hit Ratio")
+	fmt.Println(strings.Repeat("-", 28))
+
+	for _, cap := range capacidades {
+		ratio := simular(secuencia, cap)
+		fmt.Printf("%-12d  %.4f (%.2f%%)\n", cap, ratio, ratio*100)
+	}
+
+	fmt.Println("\nTendencia: a mayor capacidad de caché, mayor hit ratio.")
+}
